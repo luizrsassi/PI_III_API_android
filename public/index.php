@@ -6,7 +6,7 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-require_once __DIR__ . '/../includes/DbConnect.php';
+require_once __DIR__ . '/../includes/DbOperations.php';
 
 $app = new \Slim\App();
 
@@ -15,17 +15,156 @@ $app = new \Slim\App();
 // Exibe o erro na tela
 //
 //$app = new \Slim\App(['settings' => ['displayErrorDetails' => true]]);
-//=================================
-$app->get('/hello/{name}', function (Request $request, Response $response, array $args) {
-    $name = $args['name'];
-    $response->getBody()->write("Hello, $name");
-    $db = new DbConnect;
+//=================================                
+/**
+ * endpoint: createamostra
+ * parameters: nomeCliente, nomeAmostra, exame, numeroContrato, concetracaoComposto, tempoExposicao, Observacao 
+ * method: POST
+ */
+$app->post('/createamostra', function (Request $request, Response $response) {
+    if (!haveEmptyParameters(array('password', 'nomeCliente', 'nomeAmostra', 'exame', 'numeroContrato', 'concetracaoComposto', 'tempoExposicao', 'Observacao'), $response)) {
 
-    if ($db->connect() != null) {
-        echo 'Connection Succesful!';
-    };
+        $request_data = $request->getParsedBody();
 
-    return $response;
+        $nomeCliente = $request_data['nomeCliente'];
+        $nomeAmostra = $request_data['nomeAmostra'];
+        $exame = $request_data['exame'];
+        $numeroContrato = $request_data['numeroContrato'];
+        $concetracaoComposto = $request_data['concetracaoComposto'];
+        $tempoExposicao = $request_data['tempoExposicao'];
+        $Observacao = $request_data['Observacao'];
+        $password = $request_data['password'];
+
+        $hash_password = password_hash($password, PASSWORD_DEFAULT);
+
+        $db = new DbOperations;
+
+        $result = $db->createAmostra($hash_password, $nomeCliente,  $nomeAmostra, $exame, $numeroContrato, $concetracaoComposto, $tempoExposicao, $Observacao);
+
+        if ($result == AMOSTRA_CREATED) {
+
+            $message = array();
+            $message['error'] = false;
+            $message['message'] = 'Amostra adicionada com sucesso';
+
+            $response->write(json_encode($message));
+
+            return $response
+                ->withHeader('Content-type', 'application/json')
+                ->withStatus(201);
+        } else if ($result == AMOSTRA_FAILURE) {
+            $message = array();
+            $message['error'] = true;
+            $message['message'] = 'Ocorreu algum erro';
+
+            $response->write(json_encode($message));
+
+            return $response
+                ->withHeader('Content-type', 'application/json')
+                ->withStatus(422);
+        } else if ($result == AMOSTRA_EXISTS) {
+            $message = array();
+            $message['error'] = true;
+            $message['message'] = 'A amostra já foi registrada';
+
+            $response->write(json_encode($message));
+
+            return $response
+                ->withHeader('Content-type', 'application/json')
+                ->withStatus(422);
+        }
+    }
+    return $response
+        ->withHeader('Content-type', 'application/json')
+        ->withStatus(422);
 });
+
+$app->post('/clientelogin', function (Request $request, Response $response) {
+
+    if (!haveEmptyParameters(array('numeroContrato', 'password'), $response)) {
+        $request_data = $request->getParsedBody();
+
+        $numeroContrato = $request_data['numeroContrato'];
+        $password = $request_data['password'];
+
+        $db = new DbOperations;
+
+        $result = $db->clienteLogin($numeroContrato, $password);
+        if ($result == CLIENTE_AUTHENTICATED) {
+            $cliente = $db->getClienteByNumeroContrato($numeroContrato);
+            $response_data = array();
+
+            $response_data['error'] = false;
+            $response_data['message'] = 'Login realizado com sucesso';
+            $response_data['cliente'] = $cliente;
+
+            $response->write(json_encode($response_data));
+
+            return $response
+                ->withHeader('Content-type', 'application/json')
+                ->withStatus(200);
+        } else if ($result == CLIENTE_NOT_FOUND) {
+            $response_data = array();
+
+            $response_data['error'] = true;
+            $response_data['message'] = 'O cliente informado não existe';
+
+            return $response
+                ->withHeader('Content-type', 'application/json')
+                ->withStatus(200);
+        } else if ($result == CLIENTE_PASSWORD_DO_NOT_MATCH) {
+            $response_data = array();
+
+            $response_data['error'] = true;
+            $response_data['message'] = 'Entrada inválida';
+
+            return $response
+                ->withHeader('Content-type', 'application/json')
+                ->withStatus(200);
+        }
+    }
+    return $response
+        ->withHeader('Content-type', 'application/json')
+        ->withStatus(422);
+});
+
+$app->get('/allamostras', function (Request $request, Response $response) {
+    $db = new DbOperations();
+
+    $users = $db->getAllAmostras();
+
+    $response_data = array();
+
+    $response_data['error'] = false;
+    $response_data['users'] = $users;
+
+    $response->write(json_encode($response_data));
+
+    return $response
+        ->withHeader('Content-type', 'application/json')
+        ->withStatus(200);
+});
+
+function haveEmptyParameters($required_params, $response)
+{
+    $error = false;
+    $error_params = '';
+    $request_params = $_REQUEST;
+
+    foreach ($required_params as $param) {
+        if (!isset($request_params[$param]) || strlen($request_params[$param]) <= 0) {
+            $error = true;
+            $error_params .= $param . ', ';
+        }
+    }
+
+    if ($error) {
+        $error_detail = array();
+        $error_detail['error'] = true;
+        $error_detail['message'] = 'Parâmetros necessários ' . substr($error_params, 0, -2) . ' estão faltando ou não existem.';
+        $response->write(json_encode($error_detail));
+    }
+    return $error;
+}
 
 $app->run();
