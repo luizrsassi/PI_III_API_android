@@ -147,6 +147,46 @@ class DbOperations
         return $amostra;
     }
 
+    public function updateAmostra($nomeCliente, $nomeAmostra, $exame, $numeroContrato, $concetracaoComposto, $tempoExposicao, $Observacao, $id)
+    {
+        $stmt = $this->con->prepare('UPDATE amostras SET nomeCliente = ?, nomeAmostra = ?, exame = ?, numeroContrato = ?, concetracaoComposto = ?, tempoExposicao = ?, Observacao = ? WHERE id = ?;');
+        $stmt->bind_param('sssssssi', $nomeCliente, $nomeAmostra, $exame, $numeroContrato, $concetracaoComposto, $tempoExposicao, $Observacao, $id);
+        if ($stmt->execute()) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public function updatePassword($currentpassword, $newpassword, $numeroContrato)
+    {
+        $hashed_password = $this->getClientesPasswordByNumeroContrato($numeroContrato);
+
+        if (password_verify($currentpassword, $hashed_password)) {
+
+            $hash_password = password_hash($newpassword, PASSWORD_DEFAULT);
+
+            $stmt = $this->con->prepare("UPDATE amostras SET password = ? WHERE numeroContrato = ?;");
+            $stmt->bind_param('ss', $hash_password, $numeroContrato);
+
+            if ($stmt->execute())
+                return PASSWORD_CHANGED;
+            return PASSWORD_NOT_CHANGED;
+        } else {
+            return PASSWORD_DO_NOT_MATCH;
+        }
+    }
+
+    public function deleteAmostra($id)
+    {
+        $stmt = $this->con->prepare("DELETE FROM amostras WHERE id = ?;");
+        $stmt->bind_param("i", $id);
+
+        if ($stmt->execute())
+            return true;
+        return false;
+    }
+
     private function isClienteExist($numeroContrato)
     {
         $stmt = $this->con->prepare("SELECT id 
